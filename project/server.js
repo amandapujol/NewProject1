@@ -1,9 +1,15 @@
 const express = require('express');
 const path = require('path');
+const cors = require('cors');
 const da = require('./data-access');
 
 const app = express();
 const port = 4000;
+
+const apiKeyMiddleware = require('./apiKeyMiddleware');
+
+// Enable CORS - put this early before your routes
+app.use(cors());
 
 // Middleware to parse JSON bodies
 app.use(express.json());
@@ -11,9 +17,24 @@ app.use(express.json());
 // Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// GET all customers
-app.get('/customers/:id', async (req, res) => {
-  const id = req.params.id;
+// GET all customers (protected by API key middleware)
+app.get('/customers', apiKeyMiddleware, async (req, res) => {
+  try {
+    const [customers, err] = await da.getCustomers();
+    if (customers) {
+      res.json(customers);
+    } else {
+      res.status(500).send(err);
+    }
+  } catch (error) {
+    console.error('Error in GET /customers:', error);
+    res.status(500).send('Server error');
+  }
+});
+
+// GET customer by id
+app.get('/customers/:id', apiKeyMiddleware, async (req, res) => {
+  const id = Number(req.params.id);  // Convert id to number
   try {
     const [customer, err] = await da.getCustomerById(id);
     if (customer) {
@@ -26,7 +47,6 @@ app.get('/customers/:id', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-
 
 // GET reset - reset customer data to defaults
 app.get('/reset', async (req, res) => {
@@ -44,7 +64,7 @@ app.get('/reset', async (req, res) => {
 });
 
 // POST new customer
-app.post('/customers', async (req, res) => {
+app.post('/customers', apiKeyMiddleware, async (req, res) => {
   const newCustomer = req.body;
   if (!newCustomer) {
     return res.status(400).send('missing request body');
@@ -64,7 +84,7 @@ app.post('/customers', async (req, res) => {
 });
 
 // PUT update existing customer by id
-app.put('/customers/:id', async (req, res) => {
+app.put('/customers/:id', apiKeyMiddleware, async (req, res) => {
   const updatedCustomer = req.body;
   const id = req.params.id;
 
@@ -75,7 +95,7 @@ app.put('/customers/:id', async (req, res) => {
   // Remove _id if present to avoid conflict
   delete updatedCustomer._id;
 
-  // Ensure id from URL parameter is a number and assigned to the customer object
+  // Ensure id from URL parameter is a number and assign to the customer object
   updatedCustomer.id = +id;
 
   try {
@@ -92,8 +112,8 @@ app.put('/customers/:id', async (req, res) => {
 });
 
 // DELETE customer by id
-app.delete('/customers/:id', async (req, res) => {
-  const id = req.params.id;
+app.delete('/customers/:id', apiKeyMiddleware, async (req, res) => {
+  const id = Number(req.params.id);
   try {
     const [message, err] = await da.deleteCustomerById(id);
     if (message) {
@@ -111,6 +131,3 @@ app.delete('/customers/:id', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
-
-const cors = require('cors');
-app.use(cors());
